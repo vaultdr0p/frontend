@@ -18,6 +18,11 @@ declare global {
       RECAPTCHA_SITE_KEY: string;
       SINGLE_TENANT_MODE: boolean;
 
+      // Disbursement vault (Soroban). Optional: when unset, the ids baked into
+      // the generated contract bindings are used, so local dev needs no setup.
+      VAULT_CONTRACT_ID?: string;
+      VAULT_NETWORK_PASSPHRASE?: string;
+
       USE_SSO?: boolean;
       OIDC_AUTHORITY?: string;
       OIDC_CLIENT_ID?: string;
@@ -53,6 +58,12 @@ const generateEnvConfig = async () => {
     SINGLE_TENANT_MODE: Boolean(
       process?.env?.REACT_APP_SINGLE_TENANT_MODE || window._env_.SINGLE_TENANT_MODE,
     ),
+    VAULT_CONTRACT_ID:
+      process?.env?.REACT_APP_VAULT_CONTRACT_ID || window?._env_?.VAULT_CONTRACT_ID || "",
+    VAULT_NETWORK_PASSPHRASE:
+      process?.env?.REACT_APP_VAULT_NETWORK_PASSPHRASE ||
+      window?._env_?.VAULT_NETWORK_PASSPHRASE ||
+      "",
     USE_SSO: Boolean(process?.env?.REACT_APP_USE_SSO || window?._env_?.USE_SSO),
     OIDC_AUTHORITY: process?.env?.REACT_APP_OIDC_AUTHORITY || window?._env_?.OIDC_AUTHORITY,
     OIDC_CLIENT_ID: process?.env?.REACT_APP_OIDC_CLIENT_ID || window?._env_?.OIDC_CLIENT_ID,
@@ -73,6 +84,8 @@ export const {
   RPC_ENABLED,
   RECAPTCHA_SITE_KEY,
   SINGLE_TENANT_MODE,
+  VAULT_CONTRACT_ID,
+  VAULT_NETWORK_PASSPHRASE,
   USE_SSO,
   OIDC_AUTHORITY,
   OIDC_CLIENT_ID,
