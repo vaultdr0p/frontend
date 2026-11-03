@@ -25,6 +25,9 @@ jobs:
           node-version: 22 # package.json engines requires >=22.x
           cache: yarn
       - run: yarn install --frozen-lockfile
+      # src/generated/gitInfo.ts is gitignored and generated; without this,
+      # tsc fails on App.tsx's import of it on a fresh checkout.
+      - run: yarn git-info
       - run: yarn typecheck
 
   test:
@@ -36,6 +39,9 @@ jobs:
           node-version: 22
           cache: yarn
       - run: yarn install --frozen-lockfile
+      # src/generated/gitInfo.ts is gitignored and generated; without this,
+      # tsc fails on App.tsx's import of it on a fresh checkout.
+      - run: yarn git-info
       - run: yarn test
 
   # Lints only the files a PR touches. A repo-wide `yarn lint` currently fails
