@@ -1,0 +1,80 @@
+name: Quality
+
+# The existing test-build.yml runs `yarn install && yarn build` only — there is
+# no lint, typecheck or test job anywhere in CI, which is how repo-wide lint
+# drifted to hundreds of pre-existing problems. This workflow adds the missing
+# gates.
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 22 # package.json engines requires >=22.x
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      - run: yarn typecheck
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 22
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      - run: yarn test
+
+  # Lints only the files a PR touches. A repo-wide `yarn lint` currently fails
+  # on pre-existing drift unrelated to any given change, so gating on it would
+  # make every PR red. Scoping to the diff means new code is held to
+  # --max-warnings 0 while the backlog is paid down separately.
+  lint-changed:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          # Need the base commit present locally to diff against it.
+          fetch-depth: 0
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 22
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+
+      - name: Lint changed TypeScript files
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # ACMR: added, copied, modified, renamed. Excludes deletions, which
+          # have no file left to lint.
+          mapfile -t files < <(
+            git diff --name-only --diff-filter=ACMR "$BASE_SHA" "$HEAD_SHA" \
+              | { grep -E '^src/.*\.tsx?$' || true; } \
+              | { grep -v '^src/contracts/' || true; }
+          )
+
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No TypeScript source files changed; nothing to lint."
+            exit 0
+          fi
+
+          printf 'Linting %d changed file(s):\n' "${#files[@]}"
+          printf '  %s\n' "${files[@]}"
+          npx eslint --max-warnings 0 "${files[@]}"
