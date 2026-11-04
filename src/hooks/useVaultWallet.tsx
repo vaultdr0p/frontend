@@ -81,18 +81,31 @@ export const VaultWalletProvider = ({ children }: { children: React.ReactNode })
   const [connectError, setConnectError] = useState<string | null>(null);
   const [networkMismatch, setNetworkMismatch] = useState<VaultWalletState["networkMismatch"]>(null);
 
-  /** Re-reads the wallet's network and records any mismatch. */
-  const refreshNetwork = useCallback(async () => {
+  /**
+   * Re-reads the wallet's network, records any mismatch, and returns the
+   * verdict.
+   *
+   * The verdict is returned as well as stored because `signTransaction` has to
+   * act on it immediately: reading the state variable it just set would see
+   * the previous render's value and sign anyway.
+   */
+  const refreshNetwork = useCallback(async (): Promise<{
+    mismatch: VaultWalletState["networkMismatch"];
+    isConfirmed: boolean;
+  }> => {
     try {
       const { networkPassphrase } = await StellarWalletsKit.getNetwork();
-      setNetworkMismatch(
+      const mismatch =
         networkPassphrase === vaultNetworkPassphrase
           ? null
-          : { walletNetwork: networkPassphrase, expected: vaultNetworkPassphrase },
-      );
+          : { walletNetwork: networkPassphrase, expected: vaultNetworkPassphrase };
+
+      setNetworkMismatch(mismatch);
+      return { mismatch, isConfirmed: true };
     } catch {
       // A failure here only means we cannot confirm the network; leave any
       // previous verdict alone rather than claiming a mismatch we did not see.
+      return { mismatch: null, isConfirmed: false };
     }
   }, []);
 
@@ -130,10 +143,24 @@ export const VaultWalletProvider = ({ children }: { children: React.ReactNode })
       if (!address) {
         throw new Error("Connect a wallet before signing.");
       }
+
       // Re-check immediately before signing: the user can switch networks in
-      // the extension after connecting, and signing on the wrong network would
-      // produce a transaction that can never be submitted.
-      await refreshNetwork();
+      // the extension at any time after connecting, including while the
+      // confirmation dialog is open. A stale verdict from connect time is not
+      // good enough, so this reads the wallet again and refuses on a mismatch
+      // rather than merely noting it.
+      const { mismatch, isConfirmed } = await refreshNetwork();
+
+      if (mismatch) {
+        throw new Error(
+          `Your wallet is on ${mismatch.walletNetwork}, but this vault is on ${mismatch.expected}. Switch networks in Freighter and try again. Nothing was signed.`,
+        );
+      }
+      if (!isConfirmed) {
+        throw new Error(
+          "Could not confirm which network your wallet is on, so nothing was signed. Check Freighter and try again.",
+        );
+      }
 
       const { signedTxXdr } = await StellarWalletsKit.signTransaction(xdr, {
         address,

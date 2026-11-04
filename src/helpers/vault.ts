@@ -2,7 +2,7 @@ import { StrKey } from "@stellar/stellar-sdk";
 
 import { ASSET_DECIMALS, STROOPS_PER_UNIT, ZERO_STROOPS } from "@/constants/vault";
 
-import { Errors, type Allocation, type AllocationStatus } from "@/contracts/disbursementVault";
+import { Errors } from "@/contracts/disbursementVault";
 
 /** Discriminated result of validating a single form field. */
 export type FieldValidation = { isValid: true } | { isValid: false; message: string };
@@ -102,10 +102,6 @@ export const truncateAddress = (address: string, visible = 4): string =>
   address.length <= visible * 2
     ? address
     : `${address.slice(0, visible)}…${address.slice(-visible)}`;
-
-/** The `AllocationStatus` tag as a plain string, for display and filtering. */
-export const allocationStatusTag = (allocation: Allocation): AllocationStatus["tag"] =>
-  allocation.status.tag;
 
 /**
  * Maps a thrown contract error onto its declared message.

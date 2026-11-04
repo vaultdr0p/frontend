@@ -2,25 +2,26 @@ import { useCallback, useState } from "react";
 
 import { useQueryClient } from "@tanstack/react-query";
 
-import type { AssembledTransaction, SignTransaction } from "@stellar/stellar-sdk/contract";
+import { TransactionBuilder, rpc } from "@stellar/stellar-sdk";
 
-import { VAULT_QUERY_KEY } from "@/constants/vault";
+import { API_URL } from "@/constants/envVariables";
+import { VAULT_QUERY_KEY, vaultNetworkPassphrase } from "@/constants/vault";
 
-import { vaultErrorMessage } from "@/helpers/vault";
+import { fetchApi } from "@/helpers/fetchApi";
+import { getSdpTenantName } from "@/helpers/getSdpTenantName";
+import { localStorageSessionToken } from "@/helpers/localStorageSessionToken";
+import { mapBuildTransactionResponse, vaultApiPath } from "@/helpers/vaultApi";
 
 import { useVaultWallet } from "@/hooks/useVaultWallet";
 
-/** A human-readable line in the pre-signing summary. */
-export type SummaryRow = { label: string; value: string };
+import type {
+  ApiBuildTransactionRequest,
+  ApiBuildTransactionResponse,
+  BuildTransactionResult,
+  VaultOperation,
+} from "@/types/vault";
 
-/** What the user is about to sign. */
-export type TransactionSummary = {
-  /** Short description of the operation, e.g. "Fund vault". */
-  operation: string;
-  rows: SummaryRow[];
-  /** Network fee in stroops, from simulation, when the SDK exposes it. */
-  feeStroops?: string;
-};
+import type { AppError } from "@/types";
 
 export type VaultTransactionPhase =
   | "idle"
@@ -31,128 +32,183 @@ export type VaultTransactionPhase =
   | "success"
   | "error";
 
-/** A prepared-but-unsigned vault transaction awaiting confirmation. */
-type Prepared = {
-  tx: AssembledTransaction<unknown>;
-  summary: TransactionSummary;
+export type PrepareInput = {
+  operation: VaultOperation;
+  /** Stroops. Required for fund, register and withdraw; unused by cancel. */
+  amount?: bigint;
+  recipient?: string;
+  destination?: string;
 };
 
 export type UseVaultTransaction = {
   phase: VaultTransactionPhase;
-  summary: TransactionSummary | null;
+  prepared: BuildTransactionResult | null;
   error: string | null;
-  /** Simulates the operation and moves to the review phase. */
-  prepare: (input: {
-    operation: string;
-    rows: SummaryRow[];
-    build: () => Promise<AssembledTransaction<unknown>>;
-  }) => Promise<void>;
-  /** Signs the reviewed transaction with the wallet and submits it. */
+  /** True when the failure was the user declining in the wallet. */
+  wasRejected: boolean;
+  txHash: string | null;
+  prepare: (input: PrepareInput) => Promise<void>;
   confirm: () => Promise<void>;
-  /** Abandons a prepared transaction without signing. */
-  cancel: () => void;
-  /** Clears a terminal phase so the form can be used again. */
   reset: () => void;
 };
 
+/** Reads an error's message without assuming its type. */
+const messageOf = (error: unknown): string => {
+  if (typeof error === "string") {
+    return error;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  // AppError is a plain object with a message, not an Error instance.
+  const candidate = error as Partial<AppError> | null;
+  return candidate?.message ?? "Something went wrong.";
+};
+
+const isRejection = (error: unknown): boolean =>
+  /reject|denied|declined|cancell?ed by/i.test(messageOf(error));
+
 /**
- * Drives a single vault write through simulate -> review -> sign -> submit.
+ * Builds, signs and submits a vault transaction.
  *
- * Simulation happens before the user is asked for a signature, so a call that
- * the contract would reject (`InsufficientFunds`, `DeadlinePassed`, ...)
- * surfaces as a readable error without ever opening the wallet. Only after the
- * user confirms the summary is the envelope handed to Freighter.
+ * The envelope is built by the **backend** (`POST /vault/{id}/transactions`),
+ * not in the browser. The backend assembles and simulates the invocation, so
+ * the resource fee and auth footprint come from a real simulation, and the
+ * summary shown to the signer is derived from the same values that went into
+ * the envelope it returns — the description and the bytes cannot disagree.
+ *
+ * The browser's only jobs are to show that summary, pass the XDR to the wallet
+ * extension, and submit what comes back. **No secret key is read, held or
+ * logged here**: signing happens inside the wallet, and the only thing this
+ * module receives is a signed envelope.
  */
-export const useVaultTransaction = (): UseVaultTransaction => {
-  const queryClient = useQueryClient();
-  const { signTransaction, networkMismatch, isConnected } = useVaultWallet();
-
+export const useVaultTransaction = (contractId: string): UseVaultTransaction => {
   const [phase, setPhase] = useState<VaultTransactionPhase>("idle");
-  const [prepared, setPrepared] = useState<Prepared | null>(null);
+  const [prepared, setPrepared] = useState<BuildTransactionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [wasRejected, setWasRejected] = useState(false);
+  const [txHash, setTxHash] = useState<string | null>(null);
 
-  const prepare = useCallback<UseVaultTransaction["prepare"]>(
-    async ({ operation, rows, build }) => {
-      setError(null);
+  const queryClient = useQueryClient();
+  const { address, signTransaction } = useVaultWallet();
 
-      if (!isConnected) {
-        setPhase("error");
-        setError("Connect a wallet before submitting a transaction.");
-        return;
-      }
-      // Checked before simulating as well as before signing: there is no point
-      // simulating against a network the wallet cannot sign for.
-      if (networkMismatch) {
-        setPhase("error");
-        setError(
-          `Your wallet is on "${networkMismatch.walletNetwork}" but this vault is on ` +
-            `"${networkMismatch.expected}". Switch networks in Freighter and reconnect.`,
-        );
-        return;
-      }
+  const reset = useCallback(() => {
+    setPhase("idle");
+    setPrepared(null);
+    setError(null);
+    setWasRejected(false);
+    setTxHash(null);
+  }, []);
 
+  const prepare = useCallback(
+    async (input: PrepareInput) => {
       setPhase("preparing");
+      setError(null);
+      setWasRejected(false);
+      setTxHash(null);
+
       try {
-        const tx = await build();
-        setPrepared({
-          tx,
-          summary: { operation, rows, feeStroops: tx.built?.fee },
-        });
+        const body: ApiBuildTransactionRequest = {
+          operation: input.operation,
+          ...(address ? { source: address } : {}),
+          ...(input.recipient ? { recipient: input.recipient } : {}),
+          ...(input.destination ? { destination: input.destination } : {}),
+          // Amounts go to the wire as decimal strings, never numbers.
+          ...(input.amount !== undefined ? { amount: input.amount.toString() } : {}),
+        };
+
+        const response: ApiBuildTransactionResponse = await fetchApi(
+          `${vaultApiPath(contractId)}/transactions`,
+          { method: "POST", body: JSON.stringify(body) },
+        );
+
+        const result = mapBuildTransactionResponse(response);
+
+        // The backend states which network it built for. If that is not the
+        // network this UI is configured against, something is misconfigured
+        // and signing could produce a transaction for the wrong chain.
+        if (result.networkPassphrase !== vaultNetworkPassphrase) {
+          throw new Error(
+            "The server built this transaction for a different network than this dashboard is configured for. Nothing was signed.",
+          );
+        }
+
+        setPrepared(result);
         setPhase("review");
       } catch (caught) {
-        setError(vaultErrorMessage(caught));
+        setError(messageOf(caught));
         setPhase("error");
       }
     },
-    [isConnected, networkMismatch],
+    [address, contractId],
   );
 
   const confirm = useCallback(async () => {
     if (!prepared) {
       return;
     }
+
     setError(null);
+    setWasRejected(false);
     setPhase("signing");
 
-    // Adapt the wallet hook to the SDK's Freighter-shaped signer. Only an XDR
-    // envelope crosses this boundary; no key material is involved.
-    const signer: SignTransaction = async (xdr) => ({
-      signedTxXdr: await signTransaction(xdr),
-    });
-
+    let signedXdr: string;
     try {
-      setPhase("submitting");
-      // signAndSend submits and then polls getTransaction until the ledger
-      // closes, so a resolved promise means the ledger accepted it.
-      await prepared.tx.signAndSend({ signTransaction: signer });
-
-      await queryClient.invalidateQueries({ queryKey: [VAULT_QUERY_KEY] });
-      setPrepared(null);
-      setPhase("success");
+      // signTransaction re-reads the wallet's network immediately before
+      // signing and refuses on a mismatch.
+      signedXdr = await signTransaction(prepared.xdr);
     } catch (caught) {
-      setError(vaultErrorMessage(caught));
+      setWasRejected(isRejection(caught));
+      setError(messageOf(caught));
+      setPhase("error");
+      return;
+    }
+
+    setPhase("submitting");
+    try {
+      const token = localStorageSessionToken.get();
+
+      if (!token) {
+        throw new Error("Your session has expired. Sign in again before submitting.");
+      }
+
+      // Submit through the backend's authenticated RPC proxy, the same path
+      // vault reads use, so no RPC credentials or endpoints live in the browser.
+      const rpcUrl = `${API_URL}/rpc/user`;
+      const server = new rpc.Server(rpcUrl, {
+        allowHttp: new URL(rpcUrl).protocol === "http:",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "SDP-Tenant-Name": getSdpTenantName(),
+        },
+      });
+
+      // Parsing with the expected passphrase is also a last check that the
+      // wallet signed for the network this vault is on.
+      const signedTx = TransactionBuilder.fromXDR(signedXdr, vaultNetworkPassphrase);
+      const sent = await server.sendTransaction(signedTx);
+
+      if (sent.status === "ERROR") {
+        throw new Error("The network rejected this transaction.");
+      }
+
+      const settled = await server.pollTransaction(sent.hash);
+
+      if (settled.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
+        throw new Error(`The transaction did not succeed (${settled.status}).`);
+      }
+
+      setTxHash(sent.hash);
+      setPhase("success");
+
+      // The indexer needs a moment to catch up, but refreshing now means the
+      // table reflects the new state as soon as it does.
+      await queryClient.invalidateQueries({ queryKey: [VAULT_QUERY_KEY] });
+    } catch (caught) {
+      setError(messageOf(caught));
       setPhase("error");
     }
-  }, [prepared, signTransaction, queryClient]);
+  }, [prepared, queryClient, signTransaction]);
 
-  const cancel = useCallback(() => {
-    setPrepared(null);
-    setError(null);
-    setPhase("idle");
-  }, []);
-
-  const reset = useCallback(() => {
-    setError(null);
-    setPhase(prepared ? "review" : "idle");
-  }, [prepared]);
-
-  return {
-    phase,
-    summary: prepared?.summary ?? null,
-    error,
-    prepare,
-    confirm,
-    cancel,
-    reset,
-  };
+  return { phase, prepared, error, wasRejected, txHash, prepare, confirm, reset };
 };

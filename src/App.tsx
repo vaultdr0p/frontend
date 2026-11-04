@@ -44,12 +44,14 @@ import { SetNewPassword } from "@/pages/SetNewPassword";
 import { Settings } from "@/pages/Settings";
 import { SignIn } from "@/pages/SignIn";
 import { Unauthorized } from "@/pages/Unauthorized";
+import { Vault } from "@/pages/Vault";
 import { WalletProviders } from "@/pages/WalletProviders";
 import { WalletProvidersNew } from "@/pages/WalletProvidersNew";
 
 import { Routes } from "@/constants/settings";
 
 import { SelectedWalletProvider } from "@/hooks/useSelectedWallet";
+import { VaultWalletProvider } from "@/hooks/useVaultWallet";
 
 import GitInfo from "@/generated/gitInfo";
 import { store } from "@/store";
@@ -329,6 +331,30 @@ export const App = () => {
                   <PrivateRoute acceptedRoles={["owner", "developer"]}>
                     <InnerPage isNarrow>
                       <WalletProvidersNew />
+                    </InnerPage>
+                  </PrivateRoute>
+                }
+              />
+              {/* Disbursement vault */}
+              <Route
+                path={Routes.VAULT}
+                element={
+                  <PrivateRoute
+                    acceptedRoles={[
+                      "owner",
+                      "financial_controller",
+                      "business",
+                      "initiator",
+                      "approver",
+                    ]}
+                  >
+                    <InnerPage>
+                      {/* The wallet provider is scoped to this route: no other
+                          page signs vault transactions, so nothing else needs a
+                          wallet connection in context. */}
+                      <VaultWalletProvider>
+                        <Vault />
+                      </VaultWalletProvider>
                     </InnerPage>
                   </PrivateRoute>
                 }

@@ -105,10 +105,14 @@ describe("validateRecipientAddress", () => {
 
   // Pasting a secret key into a public field is a credential leak, not a typo,
   // so it must get its own pointed message.
+  //
+  // The fixture is synthesised rather than written out: the validator only
+  // looks at the "S" prefix, so a real-looking seed would buy nothing and
+  // would cost every future reader the effort of proving it is not live.
   it("calls out a pasted secret key specifically", () => {
-    const result = validateRecipientAddress(
-      "SBFGFF27Y64ZUGFAIG5AMJGQODZZKV2YQKAVUUA4HAZQCM5V5LGEENW4",
-    );
+    const notARealSecretKey = "S".padEnd(56, "A");
+
+    const result = validateRecipientAddress(notARealSecretKey);
     expect(result.isValid).toBe(false);
     expect(result).toHaveProperty("message", expect.stringContaining("secret key"));
   });
