@@ -1,5 +1,42 @@
 # Stellar Disbursement Platform Frontend
 
+## About this fork
+
+This repository is a fork of
+[stellar/stellar-disbursement-platform-frontend](https://github.com/stellar/stellar-disbursement-platform-frontend),
+the Stellar Disbursement Platform dashboard built and maintained by the
+[Stellar Development Foundation](https://stellar.org) and its contributors. All
+credit for the dashboard itself belongs upstream; this fork exists only to add
+the feature described below.
+
+Licensing is unchanged. The project is Apache-2.0 and [`LICENSE`](LICENSE) is
+upstream's file, byte for byte — no copyright notice, attribution or file
+header has been altered or removed. Everything inherited from upstream is used
+under the terms of that licence.
+
+### What this fork adds
+
+A **disbursement vault** page at `/vault`, which reads a Soroban vault contract
+through the SDP backend's vault endpoints and lets an admin act on it:
+
+| Addition | What it is |
+|---|---|
+| **Vault dashboard** | Balances (held, allocated, claimed, withdrawable), the claim deadline and what it currently permits, and the recipients table with each allocation's claim status |
+| **Funding and cancelling** | The backend builds and simulates an unsigned envelope, the page shows that summary, and the admin signs it in Freighter through Stellar Wallets Kit |
+| **Indexer transparency** | When the backend reports a gap in the vault's event history, the page states the gap bounds in plain language and says that balances remain correct because they come from the contract |
+
+Secret keys are never handled in the browser: an unsigned envelope goes to the
+wallet extension and a signed one comes back. The wallet's network is re-read
+immediately before every signature and signing is refused on a mismatch.
+
+The page is only reachable where the backend has the vault enabled — it needs
+[`vaultdr0p/backend`](https://github.com/vaultdr0p/backend) running with
+`ENABLE_VAULT=true`, and `VAULT_CONTRACT_ID` set in this app's runtime config.
+Nothing else in the dashboard changes when it is unset.
+
+Nothing else in this fork diverges from upstream by intent. Upstream changes
+are brought in by fetching and merging rather than by rewriting history.
+
 ## Introduction
 
 The Stellar Disbursement Platform (SDP) enables organizations to disburse bulk
