@@ -14,11 +14,13 @@ import type { VaultOverview } from "@/types/vault";
  * when they are side by side.
  */
 export const VaultOverviewPanel = ({ overview }: { overview: VaultOverview }) => {
-  const figures: { label: string; value: string; note: string }[] = [
+  const figures: { label: string; value: string; note: string; testId?: string }[] = [
     {
       label: "Balance",
       value: stroopsToUnits(overview.balance),
       note: "Everything the vault holds",
+      // The end-to-end test asserts this figure changes after funding.
+      testId: "vault-balance",
     },
     {
       label: "Allocated",
@@ -48,7 +50,7 @@ export const VaultOverviewPanel = ({ overview }: { overview: VaultOverview }) =>
           <div key={figure.label} className="VaultFigures__item">
             <dt>{figure.label}</dt>
             <dd>
-              <strong>{figure.value}</strong>
+              <strong data-testid={figure.testId}>{figure.value}</strong>
               <span className="VaultFigures__note">{figure.note}</span>
             </dd>
           </div>

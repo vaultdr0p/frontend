@@ -19,9 +19,23 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: {
-      "@": resolve(__dirname, "src"),
-    },
+    alias: [
+      // Order matters: the stylesheet rule has to be tried before "@", or an
+      // import like "@/x.scss" would resolve as a source path.
+      {
+        find: /\.s?css$/,
+        replacement: resolve(__dirname, "src/test/styleStub.ts"),
+      },
+      // The browser build resolves this package via its `module` field, an
+      // ESM bundle with no stylesheet imports. Vitest would otherwise take the
+      // CJS `main`, which re-exports per-component files that each import a
+      // ./styles.scss the package does not ship.
+      {
+        find: /^@stellar\/design-system$/,
+        replacement: resolve(__dirname, "node_modules/@stellar/design-system/build/index.esm.js"),
+      },
+      { find: "@", replacement: resolve(__dirname, "src") },
+    ],
   },
   test: {
     environment: "jsdom",

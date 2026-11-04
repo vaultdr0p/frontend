@@ -28,4 +28,32 @@ window._env_ = {
 // jest-dom's matchers (toBeInTheDocument, toHaveTextContent, ...). This mirrors
 // what src/setupTests.ts has always declared, which was dead code until the
 // repo gained a test runner.
-import "@testing-library/jest-dom";
+//
+// The `/vitest` entry point is required rather than the bare package: it both
+// registers the matchers and augments Vitest's `Assertion` interface, so
+// `tsc --noEmit` knows about them. Importing "@testing-library/jest-dom"
+// registers them at runtime but leaves every matcher a type error.
+import "@testing-library/jest-dom/vitest";
+
+import { afterEach, beforeEach } from "vitest";
+
+/**
+ * The design system's `Modal` portals into `document.getElementById("root")`,
+ * which `index.html` provides in the real app. jsdom starts with a bare body,
+ * so without this the portal target is null and a modal renders nothing at
+ * all — a test then fails against an empty body instead of its assertion.
+ */
+beforeEach(() => {
+  if (!document.getElementById("root")) {
+    const root = document.createElement("div");
+    root.id = "root";
+    document.body.appendChild(root);
+  }
+});
+
+afterEach(() => {
+  document.getElementById("root")?.remove();
+  // Modal adds this to <body> while open; left behind, it leaks into the
+  // next test's environment.
+  document.body.classList.remove("modal-open");
+});
