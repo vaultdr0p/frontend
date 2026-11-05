@@ -23,7 +23,12 @@ jobs:
         include:
         - language: javascript-typescript
           build-mode: none
-        
+        # Scans this repository's own GitHub Actions workflows. Default setup
+        # used to cover this language; it is declared here because the advanced
+        # configuration in this file replaced it.
+        - language: actions
+          build-mode: none
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v7.0.1
