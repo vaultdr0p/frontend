@@ -37,6 +37,23 @@ Nothing else in the dashboard changes when it is unset.
 Nothing else in this fork diverges from upstream by intent. Upstream changes
 are brought in by fetching and merging rather than by rewriting history.
 
+## Status
+
+The vault UI added by this fork is **testnet only and has not been audited**.
+It is not intended for mainnet and must not be used to move real funds.
+
+It is not standalone: it reads the vault endpoints of
+[`vaultdr0p/backend`](https://github.com/vaultdr0p/backend) and displays state
+indexed from the Soroban contract in
+[`vaultdr0p/contract`](https://github.com/vaultdr0p/contract). Both are
+unaudited and testnet-only on the same terms.
+
+This applies to the vault UI specifically. The rest of this repository is
+upstream's Stellar Disbursement Platform dashboard; its status, support and
+release process are upstream's, not this fork's. Security reports for the fork
+go through [SECURITY.md](SECURITY.md); see
+[CONTRIBUTING.md](CONTRIBUTING.md) to contribute.
+
 ## Introduction
 
 The Stellar Disbursement Platform (SDP) enables organizations to disburse bulk
