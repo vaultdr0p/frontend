@@ -10,6 +10,13 @@ on:
     branches:
       - develop
 
+# Least privilege: the jobs below check the repository out and read it. The
+# DockerHub push authenticates with DOCKERHUB_USERNAME/DOCKERHUB_TOKEN, not
+# with the GITHUB_TOKEN, so no write scope is needed. Declaring this block
+# sets every unlisted scope to none.
+permissions:
+  contents: read
+
 jobs:
   test-build:
     uses: ./.github/workflows/test-build.yml # execute the callable test-build.yml
@@ -98,6 +105,9 @@ jobs:
       - build_and_push_docker_image_on_release
       - build_and_push_docker_image_on_dev_push
     runs-on: ubuntu-latest
+    # This job only inspects the results of its dependencies and exits. It
+    # needs no access to the repository at all.
+    permissions: {}
     steps:
       - if:
           contains(needs.*.result, 'failure') || contains(needs.*.result,
