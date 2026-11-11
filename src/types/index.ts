@@ -146,6 +146,9 @@ export type AnyObject = {
 export interface AppError {
   message: string;
   extras?: AnyObject;
+  // HTTP status of the response that produced this error, when there was one. Lets a caller
+  // tell apart errors whose messages alone are ambiguous (e.g. two different 404s).
+  status?: number;
 }
 
 export type Pagination = {

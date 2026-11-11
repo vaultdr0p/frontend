@@ -10,6 +10,9 @@ import { PageHeader } from "@/components/PageHeader";
 
 import { USE_SSO } from "@/constants/envVariables";
 import { Routes } from "@/constants/settings";
+import { vaultContractId } from "@/constants/vault";
+
+import { useVaultFeature } from "@/apiQueries/useVaultFeature";
 
 import { getAppVersion } from "@/helpers/getAppVersion";
 import { localStorageSelectedWallet } from "@/helpers/localStorageSelectedWallet";
@@ -65,6 +68,15 @@ export const InnerPage = ({ children, isNarrow, isCardLayout }: InnerPageProps) 
     "approver",
   ];
 
+  // The vault route's acceptedRoles (App.tsx). The feature probe only runs for these roles:
+  // anyone else would not see the item anyway.
+  const VAULT_ROLES = DISBURSEMENT_ROLES;
+  const currentRole = userAccount.role;
+  const isVaultEnabled = useVaultFeature(
+    vaultContractId,
+    Boolean(userAccount.isAuthenticated && currentRole && VAULT_ROLES.includes(currentRole)),
+  );
+
   const ITEMS_TOP: NavItem[] = [
     {
       id: "nav-home",
@@ -105,6 +117,18 @@ export const InnerPage = ({ children, isNarrow, isCardLayout }: InnerPageProps) 
       route: Routes.DISTRIBUTION_ACCOUNT,
       icon: <Icon.Dataflow01 />,
     },
+    // Shown only once the backend has confirmed the vault feature is on (see useVaultFeature).
+    ...(isVaultEnabled
+      ? [
+          {
+            id: "nav-vault",
+            label: "Vault",
+            route: Routes.VAULT,
+            icon: <Icon.Safe />,
+            acceptedRoles: VAULT_ROLES,
+          },
+        ]
+      : []),
     {
       id: "nav-analytics",
       label: "Analytics",
@@ -148,7 +172,6 @@ export const InnerPage = ({ children, isNarrow, isCardLayout }: InnerPageProps) 
   ];
 
   // Hide nav links the current user can't open, so they don't dead-end at the Unauthorized page.
-  const currentRole = userAccount.role;
   const canSee = (item: NavItem) =>
     !item.acceptedRoles || (currentRole && item.acceptedRoles.includes(currentRole));
 

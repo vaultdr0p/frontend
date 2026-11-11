@@ -34,6 +34,7 @@ export const RecipientsTable = ({
   canCancel,
   cancelBlockedReason,
   onCancel,
+  emptyMessage,
 }: {
   allocations: VaultAllocation[];
   isLoading: boolean;
@@ -42,6 +43,13 @@ export const RecipientsTable = ({
   canCancel: boolean;
   cancelBlockedReason?: string;
   onCancel: (allocation: VaultAllocation) => void;
+  /**
+   * Replaces the default empty state. The default says nobody has been
+   * registered, which is only true when the index is complete; a caller that
+   * knows it is not (e.g. the vault has not been indexed) passes a neutral
+   * message instead.
+   */
+  emptyMessage?: string;
 }) => {
   if (isLoading) {
     return (
@@ -60,6 +68,16 @@ export const RecipientsTable = ({
         <Notification variant="error" title="Could not load recipients" isFilled>
           {error.message}
         </Notification>
+      </Card>
+    );
+  }
+
+  if (allocations.length === 0 && emptyMessage) {
+    return (
+      <Card>
+        <div className="VaultRecipients__empty">
+          <p>{emptyMessage}</p>
+        </div>
       </Card>
     );
   }
