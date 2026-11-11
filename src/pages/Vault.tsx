@@ -9,11 +9,13 @@ import { IndexerStatusBanner } from "@/components/Vault/IndexerStatusBanner";
 import { RecipientsTable } from "@/components/Vault/RecipientsTable";
 import { SignTransactionDialog } from "@/components/Vault/SignTransactionDialog";
 import { VaultOverviewPanel } from "@/components/Vault/VaultOverviewPanel";
+import { VaultStatusIndicator } from "@/components/Vault/VaultStatusIndicator";
 
 import { vaultContractId } from "@/constants/vault";
 
 import { useVaultAllocations } from "@/apiQueries/useVaultAllocations";
 import { useVaultOverview } from "@/apiQueries/useVaultOverview";
+import { useVaultStatus } from "@/apiQueries/useVaultStatus";
 import { useVaultTransaction } from "@/apiQueries/useVaultTransaction";
 
 import { useVaultWallet } from "@/hooks/useVaultWallet";
@@ -35,6 +37,7 @@ export const Vault = () => {
 
   const wallet = useVaultWallet();
   const overviewQuery = useVaultOverview(contractId);
+  const statusView = useVaultStatus(contractId);
   const allocationsQuery = useVaultAllocations(contractId);
   const transaction = useVaultTransaction(contractId);
 
@@ -51,21 +54,31 @@ export const Vault = () => {
     );
   }
 
+  // The indexer status is shown even when the overview cannot be read: a
+  // vault that fails to load is exactly when "is the indexer running?" is
+  // the question an operator needs answered.
   if (overviewQuery.isLoading) {
     return (
-      <div aria-live="polite" aria-busy="true">
-        <Loader size="2rem" />
-        <span>Loading vault…</span>
+      <div className="VaultPage">
+        <VaultStatusIndicator view={statusView} />
+        <div aria-live="polite" aria-busy="true">
+          <Loader size="2rem" />
+          <span>Loading vault…</span>
+        </div>
       </div>
     );
   }
 
   if (overviewQuery.error || !overview) {
     return (
-      <Notification variant="error" title="Could not load this vault" isFilled>
-        {overviewQuery.error?.message ??
-          "The vault could not be read. It may not be indexed yet, or the vault feature may be disabled on the server."}
-      </Notification>
+      <div className="VaultPage">
+        <VaultStatusIndicator view={statusView} />
+        <IndexerStatusBanner health={statusView} />
+        <Notification variant="error" title="Could not load this vault" isFilled>
+          {overviewQuery.error?.message ??
+            "The vault could not be read. It may not be indexed yet, or the vault feature may be disabled on the server."}
+        </Notification>
+      </div>
     );
   }
 
@@ -78,7 +91,9 @@ export const Vault = () => {
     <div className="VaultPage">
       <h1>Disbursement vault</h1>
 
-      <IndexerStatusBanner indexer={overview.indexer} />
+      <VaultStatusIndicator view={statusView} />
+
+      <IndexerStatusBanner indexer={overview.indexer} health={statusView} />
 
       {!wallet.isConnected ? (
         <Card>

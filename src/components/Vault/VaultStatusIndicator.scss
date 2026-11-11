@@ -1,0 +1,74 @@
+@use "../../styles/styles-utils.scss" as *;
+
+// The accent border is a secondary cue only: every state is also spelled out
+// in text and carries its own icon.
+.VaultStatusIndicator {
+  display: flex;
+  flex-direction: column;
+  gap: pxToRem(8px);
+  padding: pxToRem(12px) pxToRem(16px);
+  border: 1px solid var(--sds-clr-gray-06);
+  border-left-width: pxToRem(4px);
+  border-radius: pxToRem(6px);
+  background-color: var(--sds-clr-gray-01);
+
+  &[data-kind="healthy"] {
+    border-left-color: var(--sds-clr-green-06);
+  }
+
+  &[data-kind="lagging"] {
+    border-left-color: var(--sds-clr-amber-06);
+  }
+
+  &[data-kind="stalled"],
+  &[data-kind="unavailable"] {
+    border-left-color: var(--sds-clr-red-06);
+  }
+
+  &[data-kind="first_sync"],
+  &[data-kind="loading"] {
+    border-left-color: var(--sds-clr-lilac-06);
+  }
+
+  &__summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: pxToRem(6px);
+    font-size: pxToRem(14px);
+    color: var(--sds-clr-gray-12);
+
+    svg {
+      flex-shrink: 0;
+      width: pxToRem(16px);
+      height: pxToRem(16px);
+    }
+  }
+
+  &__label {
+    font-weight: 600;
+  }
+
+  &__reason {
+    color: var(--sds-clr-gray-11);
+  }
+
+  &__details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(pxToRem(140px), 1fr));
+    gap: pxToRem(8px) pxToRem(16px);
+    margin: 0;
+
+    dt {
+      font-size: pxToRem(12px);
+      color: var(--sds-clr-gray-11);
+    }
+
+    dd {
+      margin: 0;
+      font-size: pxToRem(14px);
+      font-weight: 500;
+      color: var(--sds-clr-gray-12);
+    }
+  }
+}

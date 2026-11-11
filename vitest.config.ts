@@ -22,8 +22,12 @@ export default defineConfig({
     alias: [
       // Order matters: the stylesheet rule has to be tried before "@", or an
       // import like "@/x.scss" would resolve as a source path.
+      //
+      // The pattern must match the *whole* specifier: Vite replaces only the
+      // matched part, so a bare /\.s?css$/ turned "./Foo.scss" into
+      // "./Foo/abs/path/styleStub.ts", which does not exist.
       {
-        find: /\.s?css$/,
+        find: /^.+\.s?css$/,
         replacement: resolve(__dirname, "src/test/styleStub.ts"),
       },
       // The browser build resolves this package via its `module` field, an
