@@ -9,16 +9,22 @@
  */
 import { API_URL } from "@/constants/envVariables";
 
+import { fetchApi } from "@/helpers/fetchApi";
+
 import type {
   ApiAllocation,
   ApiAllocationsResponse,
   ApiAmount,
   ApiBuildTransactionResponse,
+  ApiIndexerHealth,
   ApiIndexerStatus,
   ApiVaultEvent,
   ApiVaultEventsResponse,
   ApiVaultOverview,
   BuildTransactionResult,
+  IndexerHealth,
+  IndexerHealthReason,
+  IndexerHealthStatus,
   IndexerStatus,
   VaultAllocation,
   VaultAllocationsPage,
@@ -76,6 +82,74 @@ export const mapIndexerStatus = (api: ApiIndexerStatus): IndexerStatus => ({
   gapToLedger: api.gap_to_ledger ?? null,
   degradedReason: api.degraded_reason ?? null,
 });
+
+/**
+ * The status/reason pairs the backend can send. The spec ties each reason to
+ * exactly one status, so a mismatched pair is a contract violation, not a
+ * state to render.
+ */
+const HEALTH_REASONS_BY_STATUS: Record<IndexerHealthStatus, readonly IndexerHealthReason[]> = {
+  ok: ["none"],
+  lagging: ["lag_over_threshold"],
+  stalled: ["rpc_unreachable", "never_indexed", "no_recent_commit"],
+};
+
+const isHealthStatus = (value: unknown): value is IndexerHealthStatus =>
+  typeof value === "string" && Object.hasOwn(HEALTH_REASONS_BY_STATUS, value);
+
+/** A nullable integer field: null stays null, anything that is not a number throws. */
+const parseNullableCount = (value: unknown, field: string): number | null => {
+  if (value === null) {
+    return null;
+  }
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`The server sent an unreadable ${field}.`);
+  }
+  return value;
+};
+
+/**
+ * Maps `GET /vault/{contract_id}/status`.
+ *
+ * Strict on purpose: an unknown status or reason throws, and the caller shows
+ * "Status unavailable". Guessing a state for an unrecognised value could
+ * render a broken indexer as healthy, which is the one outcome this endpoint
+ * exists to prevent.
+ */
+export const mapIndexerHealth = (api: ApiIndexerHealth): IndexerHealth => {
+  if (!isHealthStatus(api.status)) {
+    throw new Error("The server sent an unknown indexer status.");
+  }
+  if (!HEALTH_REASONS_BY_STATUS[api.status].includes(api.reason)) {
+    throw new Error("The server sent an indexer reason that does not match its status.");
+  }
+
+  const checkedAt = parseApiDate(api.checked_at);
+  if (!checkedAt) {
+    throw new Error("The server sent an unreadable status time.");
+  }
+
+  return {
+    contractId: api.contract_id,
+    status: api.status,
+    reason: api.reason,
+    detail: typeof api.detail === "string" ? api.detail : "",
+    isDegraded: api.degraded === true,
+    cursorLedger: parseNullableCount(api.cursor_ledger, "cursor ledger"),
+    rpcLatestLedger: parseNullableCount(api.rpc_latest_ledger, "latest ledger"),
+    lagLedgers: parseNullableCount(api.lag_ledgers, "lag"),
+    lagSecondsEstimate: parseNullableCount(api.lag_seconds_estimate, "lag estimate"),
+    lastEventAt: parseApiDate(api.last_event_at),
+    retentionHeadroom: parseNullableCount(api.retention_headroom, "retention headroom"),
+    checkedAt,
+  };
+};
+
+/** Reads one vault's live indexer health. Auth headers come from fetchApi. */
+export const fetchVaultStatus = async (contractId: string): Promise<IndexerHealth> => {
+  const response: ApiIndexerHealth = await fetchApi(`${vaultApiPath(contractId)}/status`);
+  return mapIndexerHealth(response);
+};
 
 export const mapVaultOverview = (api: ApiVaultOverview): VaultOverview => {
   const deadline = parseApiDate(api.deadline);

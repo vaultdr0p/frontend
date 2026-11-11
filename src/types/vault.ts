@@ -40,6 +40,21 @@ export type VaultOperation = "fund" | "register" | "cancel" | "withdraw";
 /** `IndexerStatus.status` enum. */
 export type IndexerStatusValue = "healthy" | "degraded";
 
+/** `IndexerHealth.status` enum, from `GET /vault/{contract_id}/status`. */
+export type IndexerHealthStatus = "ok" | "lagging" | "stalled";
+
+/**
+ * `IndexerHealthReason` enum. Closed: one reason per status. Note that the
+ * backend reports `never_indexed` with status `stalled`; the UI treats it as
+ * a neutral "first sync pending", so it must branch on the reason.
+ */
+export type IndexerHealthReason =
+  | "rpc_unreachable"
+  | "never_indexed"
+  | "no_recent_commit"
+  | "lag_over_threshold"
+  | "none";
+
 // ---------------------------------------------------------------------------
 // Wire types — one per spec schema, field names as sent
 // ---------------------------------------------------------------------------
@@ -53,6 +68,27 @@ export type ApiIndexerStatus = {
   gap_from_ledger: number | null;
   gap_to_ledger: number | null;
   degraded_reason: string | null;
+};
+
+/**
+ * `IndexerHealth`: every key is always present. The four RPC-derived numbers
+ * are null when RPC is unreachable — null, not 0, because 0 would read as
+ * "caught up". `cursor_ledger` is null only when no indexer row exists.
+ */
+export type ApiIndexerHealth = {
+  contract_id: StellarAddress;
+  status: IndexerHealthStatus;
+  reason: IndexerHealthReason;
+  detail: string;
+  degraded: boolean;
+  cursor_ledger: number | null;
+  rpc_latest_ledger: number | null;
+  lag_ledgers: number | null;
+  lag_seconds_estimate: number | null;
+  last_event_at: string | null;
+  retention_headroom: number | null;
+  /** When the status was computed. The chain tip may be a few seconds older. */
+  checked_at: string;
 };
 
 export type ApiVaultOverview = {
@@ -146,6 +182,21 @@ export type IndexerStatus = {
   gapFromLedger: number | null;
   gapToLedger: number | null;
   degradedReason: string | null;
+};
+
+export type IndexerHealth = {
+  contractId: StellarAddress;
+  status: IndexerHealthStatus;
+  reason: IndexerHealthReason;
+  detail: string;
+  isDegraded: boolean;
+  cursorLedger: number | null;
+  rpcLatestLedger: number | null;
+  lagLedgers: number | null;
+  lagSecondsEstimate: number | null;
+  lastEventAt: Date | null;
+  retentionHeadroom: number | null;
+  checkedAt: Date;
 };
 
 export type VaultOverview = {
