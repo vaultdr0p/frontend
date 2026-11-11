@@ -18,6 +18,8 @@ import { useVaultOverview } from "@/apiQueries/useVaultOverview";
 import { useVaultStatus } from "@/apiQueries/useVaultStatus";
 import { useVaultTransaction } from "@/apiQueries/useVaultTransaction";
 
+import { isVaultNotIndexedError } from "@/helpers/vaultApi";
+
 import { useVaultWallet } from "@/hooks/useVaultWallet";
 
 import type { VaultAllocation } from "@/types/vault";
@@ -65,6 +67,36 @@ export const Vault = () => {
           <Loader size="2rem" />
           <span>Loading vault…</span>
         </div>
+      </div>
+    );
+  }
+
+  // Not an error the operator can fix from here, and the allocations endpoint
+  // does not depend on the overview, so this is a neutral notice with the
+  // allocations still listed. Deliberately no cause in the UI: it has not been
+  // verified for any given vault. Everything that needs the overview (balances,
+  // deadline, admin wallet, funding, cancelling) is left out.
+  if (isVaultNotIndexedError(overviewQuery.error)) {
+    return (
+      <div className="VaultPage">
+        <h1>Disbursement vault</h1>
+        <VaultStatusIndicator view={statusView} />
+        <IndexerStatusBanner health={statusView} />
+        <Notification variant="primary" title="Vault not indexed" isFilled={false}>
+          This vault hasn&apos;t been indexed yet, so its balances and details can&apos;t be shown.
+          Recipient allocations are listed below. If this doesn&apos;t change, contact your
+          administrator.
+        </Notification>
+        <RecipientsTable
+          allocations={allocationsQuery.data?.allocations ?? []}
+          isLoading={allocationsQuery.isLoading}
+          error={allocationsQuery.error ?? null}
+          canCancel={false}
+          cancelBlockedReason="Allocations can't be cancelled until this vault has been indexed."
+          onCancel={() => undefined}
+          // An empty list here is not evidence that nobody was registered.
+          emptyMessage="No allocations have been indexed for this vault yet."
+        />
       </div>
     );
   }

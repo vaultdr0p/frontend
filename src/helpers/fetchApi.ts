@@ -93,22 +93,30 @@ export const fetchApi = async (
     }
   }
 
+  // Every error thrown from here carries the HTTP status, so callers can distinguish errors
+  // whose messages alone are ambiguous. Additive: the message and extras are unchanged.
+  const withStatus = (error: AppError): AppError => ({ ...error, status: request.status });
+
   if (response?.error) {
-    throw normalizeApiError(response as ApiError);
+    throw withStatus(normalizeApiError(response as ApiError));
   }
 
   // A non-2xx response without a parseable {error} body (e.g. a gateway 502 page, or JSON in
   // an unexpected shape) must fail — previously it fell through and was treated as success.
   if (!request.ok) {
     if (response) {
-      throw normalizeApiError(
-        response as ApiError,
-        `The request failed (HTTP ${request.status}). Please try again.`,
+      throw withStatus(
+        normalizeApiError(
+          response as ApiError,
+          `The request failed (HTTP ${request.status}). Please try again.`,
+        ),
       );
     }
-    throw normalizeApiError({
-      error: `The server returned an unexpected response (HTTP ${request.status}). Please try again.`,
-    } as ApiError);
+    throw withStatus(
+      normalizeApiError({
+        error: `The server returned an unexpected response (HTTP ${request.status}). Please try again.`,
+      } as ApiError),
+    );
   }
 
   return response;

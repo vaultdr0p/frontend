@@ -32,6 +32,8 @@ import type {
   VaultOverview,
 } from "@/types/vault";
 
+import type { AppError } from "@/types";
+
 /** The spec's `Amount` pattern. Anything else is a contract violation. */
 const AMOUNT_PATTERN = /^[0-9]+$/;
 
@@ -66,6 +68,32 @@ export const parseApiDate = (value: string | null | undefined): Date | null => {
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
+
+/**
+ * The backend's message for a vault whose creation event the indexer has never
+ * seen (`GET /vault/{contract_id}` → 404).
+ *
+ * COUPLING: this is matched by exact text because the backend has no
+ * machine-readable code for it yet. It must stay identical to the string in the
+ * backend's `internal/serve/httphandler/vault_handler.go`. If the backend
+ * rewords it, `isVaultNotIndexedError` stops matching and the page falls back
+ * to the generic red error — it fails safe, but loses the neutral state. The
+ * fix is a backend error code (`vault_not_indexed`), after which this should
+ * match on that code instead.
+ */
+export const VAULT_NOT_INDEXED_MESSAGE = "Vault has not been indexed yet.";
+
+/**
+ * True only for the overview's "not indexed yet" 404.
+ *
+ * Both the status and the message are required. The status alone is not
+ * enough: "Vault not found." is also a JSON 404, and an unregistered route
+ * (vault feature off) is a plain-text 404. The message alone is not enough
+ * either: it would match the same text arriving with any other status.
+ */
+export const isVaultNotIndexedError = (
+  error: Pick<AppError, "message" | "status"> | null | undefined,
+): boolean => error?.status === 404 && error.message === VAULT_NOT_INDEXED_MESSAGE;
 
 /** Base path for every endpoint of one vault. */
 export const vaultApiPath = (contractId: string): string =>
