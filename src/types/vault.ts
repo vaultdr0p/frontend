@@ -105,6 +105,13 @@ export type ApiVaultOverview = {
   available: ApiAmount | null;
   snapshot_ledger?: number;
   refreshed_at?: string;
+  /**
+   * How the summary was created (backend PR #18, VAULT_DESIGN.md §10).
+   * Absent on backends that predate it, which could only derive it from events.
+   */
+  source?: string;
+  /** The ledger a snapshot was read at. Null for an event-derived summary. */
+  bootstrap_ledger?: number | null;
   indexer: ApiIndexerStatus;
 };
 
@@ -199,6 +206,19 @@ export type IndexerHealth = {
   checkedAt: Date;
 };
 
+/**
+ * Where the vault summary came from.
+ *
+ * - `events`: seeded by the contract's `initialized` event and kept current by
+ *   every later event, so the indexed history is complete from the start.
+ * - `snapshot`: read from contract state because `initialized` was older than
+ *   the RPC retention window; recipients registered before indexing began are
+ *   unknown.
+ * - `unknown`: a value this build does not recognise. Treated like a snapshot
+ *   wherever completeness matters, never as fully indexed.
+ */
+export type VaultSummarySource = "events" | "snapshot" | "unknown";
+
 export type VaultOverview = {
   contractId: StellarAddress;
   admin: StellarAddress;
@@ -211,6 +231,9 @@ export type VaultOverview = {
   balance: bigint;
   /** Null when the backend could not read it from the contract. */
   available: bigint | null;
+  source: VaultSummarySource;
+  /** The ledger a snapshot was read at; null for events or when not reported. */
+  bootstrapLedger: number | null;
   indexer: IndexerStatus;
 };
 

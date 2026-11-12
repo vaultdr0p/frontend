@@ -1,0 +1,74 @@
+@use "../../styles/styles-utils.scss" as *;
+
+// The panel's figures and metadata are definition lists. Without these rules
+// they fall back to browser defaults: each <dd> indented 40px, and a figure's
+// value and note rendered inline with nothing between them
+// ("6Everything the vault holds").
+
+.VaultOverviewPanel__source {
+  margin: 0 0 pxToRem(12px);
+  font-size: pxToRem(12px);
+  color: var(--sds-clr-gray-11);
+}
+
+.VaultFigures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(pxToRem(160px), 1fr));
+  gap: pxToRem(16px);
+  margin: 0 0 pxToRem(16px);
+
+  &__item {
+    display: flex;
+    flex-direction: column;
+    gap: pxToRem(4px);
+    min-width: 0;
+  }
+
+  dt {
+    font-size: pxToRem(12px);
+    color: var(--sds-clr-gray-11);
+  }
+
+  dd {
+    display: flex;
+    flex-direction: column;
+    gap: pxToRem(2px);
+    margin: 0;
+  }
+
+  &__value {
+    font-size: pxToRem(20px);
+    font-weight: 600;
+    color: var(--sds-clr-gray-12);
+    overflow-wrap: anywhere;
+  }
+
+  &__note {
+    font-size: pxToRem(12px);
+    color: var(--sds-clr-gray-11);
+  }
+}
+
+.VaultMeta {
+  display: flex;
+  flex-direction: column;
+  gap: pxToRem(8px);
+  margin: 0;
+
+  &__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: pxToRem(8px);
+  }
+
+  dt {
+    min-width: pxToRem(72px);
+    font-size: pxToRem(12px);
+    color: var(--sds-clr-gray-11);
+  }
+
+  dd {
+    margin: 0;
+  }
+}

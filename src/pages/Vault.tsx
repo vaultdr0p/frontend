@@ -18,7 +18,7 @@ import { useVaultOverview } from "@/apiQueries/useVaultOverview";
 import { useVaultStatus } from "@/apiQueries/useVaultStatus";
 import { useVaultTransaction } from "@/apiQueries/useVaultTransaction";
 
-import { isVaultNotIndexedError } from "@/helpers/vaultApi";
+import { isFullyIndexed, isVaultNotIndexedError } from "@/helpers/vaultApi";
 
 import { useVaultWallet } from "@/hooks/useVaultWallet";
 
@@ -191,6 +191,13 @@ export const Vault = () => {
               : undefined
         }
         onCancel={setAllocationToCancel}
+        // An empty list proves nobody was registered only when the indexed
+        // history is complete; otherwise say what it does and does not show.
+        emptyMessage={
+          isFullyIndexed(overview)
+            ? undefined
+            : "Recipients registered before indexing began can't be listed. New registrations will appear here."
+        }
       />
 
       <ConfirmCancelDialog
