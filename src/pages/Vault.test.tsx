@@ -53,8 +53,16 @@ const NOT_INDEXED_TEXT =
   "This vault hasn't been indexed yet, so its balances and details can't be shown. " +
   "Recipient allocations are listed below. If this doesn't change, contact your administrator.";
 
-const loadedOverview = () =>
+type OverviewOverrides = {
+  source?: string;
+  bootstrap_ledger?: number | null;
+  degraded?: boolean;
+};
+
+const loadedOverview = ({ source, bootstrap_ledger, degraded = false }: OverviewOverrides = {}) =>
   mapVaultOverview({
+    ...(source === undefined ? {} : { source }),
+    ...(bootstrap_ledger === undefined ? {} : { bootstrap_ledger }),
     contract_id: "CB5HTYC4GZW67ET23SACDCWCCDQ3AKU4TYX7SAUQJSKS6LLQLYA4HG53",
     admin: "GAODBHVR63Z56MVQRBEJSYM2H5423LJ4WAPUUBOFG4JYY72S6ROKVZRX",
     token: "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
@@ -65,16 +73,19 @@ const loadedOverview = () =>
     balance: "100000000",
     available: "70000000",
     indexer: {
-      status: "healthy",
+      status: degraded ? "degraded" : "healthy",
       last_ledger: 1,
       latest_ledger: 1,
       lag_ledgers: 0,
       last_indexed_at: null,
       gap_from_ledger: null,
-      gap_to_ledger: null,
-      degraded_reason: null,
+      gap_to_ledger: degraded ? 0 : null,
+      degraded_reason: degraded ? "history missing" : null,
     },
   });
+
+const PARTIAL_HISTORY_TEXT =
+  "Recipients registered before indexing began can't be listed. New registrations will appear here.";
 
 const notification = (text: RegExp) => screen.getByText(text).closest(".Notification");
 
@@ -228,6 +239,50 @@ describe("Vault page", () => {
       expect(screen.queryByText(/hasn't been indexed yet/)).not.toBeInTheDocument();
       expect(screen.getByRole("status")).toHaveTextContent("Indexer: Healthy");
     });
+  });
+
+  describe.each([
+    ["events, healthy", { source: "events" }, true],
+    ["no source field (older backend), healthy", {}, true],
+    ["events, degraded", { source: "events", degraded: true }, false],
+    ["snapshot, healthy", { source: "snapshot", bootstrap_ledger: 5678743 }, false],
+    [
+      "snapshot, degraded",
+      { source: "snapshot", bootstrap_ledger: 5678743, degraded: true },
+      false,
+    ],
+    ["unknown source, healthy", { source: "guess" }, false],
+  ] as const)("empty allocations, %s", (_label, overrides, fullyIndexed) => {
+    it(fullyIndexed ? "keeps today's wording" : "does not claim that nobody was registered", () => {
+      setOverview({ isLoading: false, error: null, data: loadedOverview(overrides) });
+      vi.mocked(useVaultStatus).mockReturnValue(readyView(apiHealth()));
+
+      render(<Vault />);
+
+      if (fullyIndexed) {
+        expect(screen.getByText(/nobody has been registered/i)).toBeInTheDocument();
+        expect(screen.queryByText(PARTIAL_HISTORY_TEXT)).not.toBeInTheDocument();
+      } else {
+        expect(screen.getByText(PARTIAL_HISTORY_TEXT)).toBeInTheDocument();
+        expect(screen.queryByText(/nobody has been registered/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/no recipients yet/i)).not.toBeInTheDocument();
+      }
+    });
+  });
+
+  it("lists allocations normally on a snapshot vault (the wording is only for an empty list)", () => {
+    setOverview({
+      isLoading: false,
+      error: null,
+      data: loadedOverview({ source: "snapshot", bootstrap_ledger: 9 }),
+    });
+    setAllocations();
+    vi.mocked(useVaultStatus).mockReturnValue(readyView(apiHealth()));
+
+    render(<Vault />);
+
+    expect(screen.getByRole("table", { name: /recipients and allocations/i })).toBeInTheDocument();
+    expect(screen.queryByText(PARTIAL_HISTORY_TEXT)).not.toBeInTheDocument();
   });
 
   it("keeps the default empty state on the normal page", () => {

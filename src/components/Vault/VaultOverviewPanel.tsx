@@ -4,6 +4,8 @@ import { stroopsToUnits, truncateAddress } from "@/helpers/vault";
 
 import type { VaultOverview } from "@/types/vault";
 
+import "./VaultOverviewPanel.scss";
+
 /**
  * The vault's balances and configuration.
  *
@@ -45,12 +47,27 @@ export const VaultOverviewPanel = ({ overview }: { overview: VaultOverview }) =>
     <Card>
       <h3>Vault</h3>
 
+      {/* A <div>, not a <p>: the design system's theme sizes every <p> as body
+          text with a more specific selector, which would override this
+          deliberately quiet note. */}
+      {overview.source === "snapshot" ? (
+        <div className="VaultOverviewPanel__source">
+          {overview.bootstrapLedger === null
+            ? "Summary read from the contract."
+            : `Summary read from the contract at ledger ${overview.bootstrapLedger.toLocaleString()}.`}
+        </div>
+      ) : null}
+
       <dl className="VaultFigures">
         {figures.map((figure) => (
           <div key={figure.label} className="VaultFigures__item">
             <dt>{figure.label}</dt>
             <dd>
-              <strong data-testid={figure.testId}>{figure.value}</strong>
+              <strong className="VaultFigures__value" data-testid={figure.testId}>
+                {figure.value}
+              </strong>
+              {/* Value and note are stacked by CSS; this space keeps them two
+                  words for screen readers, which read the text, not the layout. */}{" "}
               <span className="VaultFigures__note">{figure.note}</span>
             </dd>
           </div>

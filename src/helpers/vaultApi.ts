@@ -30,6 +30,7 @@ import type {
   VaultAllocationsPage,
   VaultEvent,
   VaultOverview,
+  VaultSummarySource,
 } from "@/types/vault";
 
 import type { AppError } from "@/types";
@@ -179,6 +180,33 @@ export const fetchVaultStatus = async (contractId: string): Promise<IndexerHealt
   return mapIndexerHealth(response);
 };
 
+/**
+ * Reads the summary's `source`.
+ *
+ * A missing value means `events`: backends before the snapshot bootstrap
+ * could only derive the summary from events, so that is a fact about them, not
+ * a guess. An unrecognised value becomes `unknown` rather than throwing, and
+ * is never treated as fully indexed.
+ */
+export const parseSummarySource = (value: unknown): VaultSummarySource => {
+  if (value === undefined || value === null || value === "events") {
+    return "events";
+  }
+  return value === "snapshot" ? "snapshot" : "unknown";
+};
+
+/** A ledger sequence is a positive integer; anything else is not reported. */
+const parseLedger = (value: unknown): number | null =>
+  typeof value === "number" && Number.isInteger(value) && value > 0 ? value : null;
+
+/**
+ * True only when the vault's recipient list can be complete: the summary was
+ * built from events and the indexer reports no gap. Only then may the UI say
+ * that an empty list means nobody was registered.
+ */
+export const isFullyIndexed = (overview: Pick<VaultOverview, "source" | "indexer">): boolean =>
+  overview.source === "events" && !overview.indexer.isDegraded;
+
 export const mapVaultOverview = (api: ApiVaultOverview): VaultOverview => {
   const deadline = parseApiDate(api.deadline);
 
@@ -196,6 +224,8 @@ export const mapVaultOverview = (api: ApiVaultOverview): VaultOverview => {
     totalClaimed: parseApiAmount(api.total_claimed, "total claimed"),
     balance: parseApiAmount(api.balance, "balance"),
     available: parseNullableApiAmount(api.available, "available"),
+    source: parseSummarySource(api.source),
+    bootstrapLedger: parseLedger(api.bootstrap_ledger),
     indexer: mapIndexerStatus(api.indexer),
   };
 };

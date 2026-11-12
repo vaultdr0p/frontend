@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  isFullyIndexed,
+  parseSummarySource,
   mapAllocation,
   mapAllocationsResponse,
   mapIndexerStatus,
@@ -203,5 +205,90 @@ describe("mapTransactionSummary", () => {
 
   it("shows an em dash for null", () => {
     expect(mapTransactionSummary({ recipient: null })[0].value).toBe("—");
+  });
+});
+
+describe("summary source (backend PR #18)", () => {
+  const base: ApiVaultOverview = {
+    contract_id: "CB5HTYC4GZW67ET23SACDCWCCDQ3AKU4TYX7SAUQJSKS6LLQLYA4HG53",
+    admin: "GAODBHVR63Z56MVQRBEJSYM2H5423LJ4WAPUUBOFG4JYY72S6ROKVZRX",
+    token: "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+    deadline: "2026-12-01T00:00:00Z",
+    is_expired: false,
+    total_allocated: "0",
+    total_claimed: "50000000",
+    balance: "60000000",
+    available: "60000000",
+    indexer: healthyIndexer,
+  };
+
+  it.each([
+    [undefined, "events"],
+    [null, "events"],
+    ["events", "events"],
+    ["snapshot", "snapshot"],
+    ["guess", "unknown"],
+    ["", "unknown"],
+    [7, "unknown"],
+  ])("source %j is read as %s", (value, expected) => {
+    expect(parseSummarySource(value)).toBe(expected);
+  });
+
+  it("reads a snapshot's source and bootstrap ledger", () => {
+    const mapped = mapVaultOverview({ ...base, source: "snapshot", bootstrap_ledger: 5678743 });
+
+    expect(mapped.source).toBe("snapshot");
+    expect(mapped.bootstrapLedger).toBe(5678743);
+  });
+
+  it("treats a backend without the field as event-derived", () => {
+    const mapped = mapVaultOverview(base);
+
+    expect(mapped.source).toBe("events");
+    expect(mapped.bootstrapLedger).toBeNull();
+  });
+
+  it.each([null, undefined, 0, -1, 1.5, "5678743"])(
+    "reports a bootstrap ledger of %j as not reported",
+    (value) => {
+      const mapped = mapVaultOverview({
+        ...base,
+        source: "snapshot",
+        bootstrap_ledger: value as number | null,
+      });
+      expect(mapped.bootstrapLedger).toBeNull();
+    },
+  );
+
+  it("accepts a degraded indexer whose gap start is unknown (null)", () => {
+    const mapped = mapVaultOverview({
+      ...base,
+      source: "snapshot",
+      bootstrap_ledger: 5678743,
+      indexer: {
+        ...healthyIndexer,
+        status: "degraded",
+        gap_from_ledger: null,
+        gap_to_ledger: 5557783,
+        degraded_reason: "created before indexing began",
+      },
+    });
+
+    expect(mapped.indexer.isDegraded).toBe(true);
+    expect(mapped.indexer.gapFromLedger).toBeNull();
+    expect(mapped.indexer.gapToLedger).toBe(5557783);
+  });
+
+  it.each([
+    ["events", false, true],
+    ["events", true, false],
+    ["snapshot", false, false],
+    ["snapshot", true, false],
+    ["unknown", false, false],
+    ["unknown", true, false],
+  ] as const)("source %s, degraded %s: fully indexed is %s", (source, isDegraded, expected) => {
+    expect(
+      isFullyIndexed({ source, indexer: { ...mapIndexerStatus(healthyIndexer), isDegraded } }),
+    ).toBe(expected);
   });
 });
